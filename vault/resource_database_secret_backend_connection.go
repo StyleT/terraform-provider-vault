@@ -247,6 +247,16 @@ func connectionStringResource() *schema.Resource {
 				Optional:    true,
 				Description: "Maximum number of seconds a connection may be reused.",
 			},
+			"username": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "Connection credentials: username",
+			},
+			"password": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "Connection credentials: password",
+			},
 		},
 	}
 }
@@ -362,6 +372,12 @@ func getConnectionDetailsFromResponse(resp *api.Secret) []map[string]interface{}
 	if v, ok := data["connection_url"]; ok {
 		result["connection_url"] = v.(string)
 	}
+	if v, ok := data["username"]; ok {
+		result["username"] = v.(string)
+	}
+	if v, ok := data["password"]; ok {
+		result["password"] = v.(string)
+	}
 	if v, ok := data["max_open_connections"]; ok {
 		n, err := v.(json.Number).Int64()
 		if err != nil {
@@ -402,6 +418,15 @@ func setDatabaseConnectionData(d *schema.ResourceData, prefix string, data map[s
 	if v, ok := d.GetOkExists(prefix + "max_connection_lifetime"); ok {
 		data["max_connection_lifetime"] = fmt.Sprintf("%ds", v)
 	}
+
+	if prefix != "oracle.0." {
+		if v, ok := d.GetOk(prefix + "username"); ok {
+			data["username"] = v.(string)
+		}
+		if v, ok := d.GetOk(prefix + "password"); ok {
+			data["password"] = v.(string)
+		}
+	}
 }
 
 func databaseSecretBackendConnectionCreate(d *schema.ResourceData, meta interface{}) error {
@@ -430,6 +455,7 @@ func databaseSecretBackendConnectionCreate(d *schema.ResourceData, meta interfac
 	}
 
 	log.Printf("[DEBUG] Writing connection config to %q", path)
+	//fmt.Println("MAP:", data)
 	_, err = client.Logical().Write(path, data)
 	if err != nil {
 		return fmt.Errorf("error configuring database connection %q: %s", path, err)
@@ -534,6 +560,10 @@ func databaseSecretBackendConnectionRead(d *schema.ResourceData, meta interface{
 	case "mssql-database-plugin":
 		d.Set("mssql", getConnectionDetailsFromResponse(resp))
 	case "mysql-database-plugin":
+		if v, ok := d.GetOkExists("mysql.0.password"); ok {
+			details := resp.Data["connection_details"].(map[string]interface{})
+			details["password"] = v.(string)
+		}
 		d.Set("mysql", getConnectionDetailsFromResponse(resp))
 	case "mysql-rds-database-plugin":
 		d.Set("mysql_rds", getConnectionDetailsFromResponse(resp))
